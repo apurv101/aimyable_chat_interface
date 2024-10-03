@@ -1,12 +1,9 @@
 import streamlit as st
-from openai import OpenAI
-
-client = OpenAI(api_key='')
-
-# Set your OpenAI API key
+from datetime import datetime
+from langchain_logic import get_lll_steps, store_message, retrieve_relevant_messages
 
 # App layout and styling
-st.set_page_config(page_title="Chatbot with History", layout="wide")
+st.set_page_config(page_title="Chatbot with History and LangChain", layout="wide")
 st.markdown(
     """
     <style>
@@ -41,19 +38,6 @@ st.markdown(
 if "history" not in st.session_state:
     st.session_state.history = []
 
-# Function to get response from OpenAI GPT
-def get_openai_response(user_input):
-    try:
-        response = client.chat.completions.create(model="gpt-3.5-turbo",  # You can change this to "gpt-4" if you have access to GPT-4
-        messages=[
-            {"role": "system", "content": "You are a helpful assistant."},  # Optional system message for context
-            {"role": "user", "content": user_input}
-        ])
-        message = response.choices[0].message.content.strip()
-        return message
-    except Exception as e:
-        return f"Error: {e}"
-
 # Sidebar for chat history
 st.sidebar.title("Chat History")
 
@@ -65,16 +49,23 @@ if st.session_state.history:
         )
 
 # Main chat interface
-st.title("AI Chatbot")
+st.title("AI Chatbot with Task Breakdown")
 
+# Chat form for user input
 with st.form(key="chat_form"):
     user_input = st.text_input("You:", key="user_input", placeholder="Type your message here...")
     submit_button = st.form_submit_button(label="Send")
 
 if submit_button and user_input:
     with st.spinner("Thinking..."):
-        # Get response from OpenAI
-        bot_response = get_openai_response(user_input)
+        # Retrieve relevant conversation history from Chroma
+        relevant_history = retrieve_relevant_messages(user_input)
+
+        # Call the function from langchain_logic.py to get the low-level steps
+        lll_steps = get_lll_steps(user_input, relevant_history)
+
+        # Display the low-level steps
+        bot_response = f"Low-Level Language (LLL) Steps:\n{lll_steps}"
 
         # Save the chat to history
         chat_entry = {
@@ -84,7 +75,10 @@ if submit_button and user_input:
         }
         st.session_state.history.append(chat_entry)
 
-        # Display chat
+        # Store the chat in the vector database (Chroma)
+        store_message(user_input, bot_response)
+
+        # Display the conversation
         st.markdown(f"<div class='chat-message user-message'>{user_input}</div>", unsafe_allow_html=True)
         st.markdown(f"<div class='chat-message bot-message'>{bot_response}</div>", unsafe_allow_html=True)
 
